@@ -1,0 +1,72 @@
+type Query {
+    productsByPriceAsc: [Product!]!
+    productsByCategory(categoryId: ID!): [Product!]!
+    users: [User!]!
+    categories: [Category!]!
+    products: [Product!]!
+}
+
+type Mutation {
+    # User CRUD
+    createUser(input: UserInput!): User!
+    updateUser(id: ID!, input: UserInput!): User!
+    deleteUser(id: ID!): Boolean!
+
+    # Category CRUD
+    createCategory(input: CategoryInput!): Category!
+    updateCategory(id: ID!, input: CategoryInput!): Category!
+    deleteCategory(id: ID!): Boolean!
+
+    # Product CRUD
+    createProduct(input: ProductInput!): Product!
+    updateProduct(id: ID!, input: ProductInput!): Product!
+    deleteProduct(id: ID!): Boolean!
+}
+
+# ================== Entity mapping ==================
+type User {
+    id: ID!
+    fullname: String
+    email: String!
+    password: String
+    phone: String
+    categories: [Category!]
+    products: [Product!]
+}
+
+input UserInput {
+    fullname: String
+    email: String
+    password: String
+    phone: String
+    categoryIds: [ID!]
+}
+
+type Category {
+    id: ID!
+    name: String
+    images: String
+    users: [User!]
+}
+
+input CategoryInput {
+    name: String
+    images: String
+}
+
+type Product {
+    id: ID!
+    title: String
+    quantity: Int
+    desc: String
+    price: Float
+    user: User
+}
+
+input ProductInput {
+    title: String
+    quantity: Int
+    desc: String
+    price: Float
+    userId: ID
+}

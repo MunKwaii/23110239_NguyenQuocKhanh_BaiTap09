@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GraphQL Demo - Products</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: #eee; padding: 20px; }
+        h2, h3 { color: #4CAF50; }
+        input { margin: 5px; padding: 5px; }
+        button { margin: 5px; padding: 5px 10px; }
+        li { margin: 5px 0; }
+    </style>
+</head>
+<body>
+<h2>Danh sách sản phẩm (giá tăng dần)</h2>
+<ul id="list"></ul>
+
+<h3>Thêm sản phẩm</h3>
+<input id="title" placeholder="Title">
+<input id="price" placeholder="Price">
+<button onclick="addProduct()">Add Product</button>
+
+<h3>Cập nhật sản phẩm</h3>
+<input id="updateId" placeholder="Product ID">
+<input id="newTitle" placeholder="New Title">
+<input id="newPrice" placeholder="New Price">
+<button onclick="updateProduct()">Update Product</button>
+
+<script>
+    async function loadProducts() {
+        const query = `query { productsByPriceAsc { id title price user { fullname } } }`;
+        const res = await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query })
+        });
+        const data = await res.json();
+        document.getElementById("list").innerHTML =
+            data.data.productsByPriceAsc
+                .map(p => `
+        <li>
+          [${p.id}] ${p.title} - ${p.price} USD - ${p.user?.fullname || "Unknown"}
+          <button onclick="deleteProduct(${p.id})">Delete</button>
+        </li>
+      `)
+                .join("");
+    }
+
+    async function addProduct() {
+        const title = document.getElementById("title").value;
+        const price = parseFloat(document.getElementById("price").value);
+        const query = `mutation($input: ProductInput!) {
+    createProduct(input:$input) { id title price }
+  }`;
+        const variables = {
+            input: { title: title, price: price, quantity: 1, desc: "new product", userId:"1" }
+        };
+        await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, variables })
+        });
+        await loadProducts();
+    }
+
+    async function updateProduct() {
+        const id = document.getElementById("updateId").value;
+        const title = document.getElementById("newTitle").value;
+        const price = parseFloat(document.getElementById("newPrice").value);
+
+        const query = `mutation($id: ID!, $input: ProductInput!) {
+    updateProduct(id:$id, input:$input) { id title price }
+  }`;
+        const variables = { id: id, input: { title: title, price: price } };
+
+        await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, variables })
+        });
+        await loadProducts();
+    }
+
+    async function deleteProduct(id) {
+        const query = `mutation { deleteProduct(id:${id}) }`;
+        await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query })
+        });
+        await loadProducts();
+    }
+
+    window.onload = loadProducts;
+</script>
+</body>
+</html>
