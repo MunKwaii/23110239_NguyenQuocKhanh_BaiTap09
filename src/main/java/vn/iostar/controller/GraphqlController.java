@@ -20,7 +20,6 @@ public class GraphqlController {
     private final CategoryRepository categoryRepo;
     private final ProductRepository productRepo;
 
-    // ================== Query ==================
     @QueryMapping
     public List<Product> productsByPriceAsc() {
         return productRepo.findAllByOrderByPriceAsc();
@@ -28,14 +27,7 @@ public class GraphqlController {
 
     @QueryMapping
     public List<Product> productsByCategory(@Argument Long categoryId) {
-        // Lấy tất cả user thuộc category
-        Category c = categoryRepo.findById(categoryId)
-                .orElseThrow(() -> new RuntimeException("Category not found"));
-        List<Product> result = new ArrayList<>();
-        for (User u : c.getUsers()) {
-            result.addAll(productRepo.findByUser_Id(u.getId()));
-        }
-        return result;
+        return productRepo.findByCategoryViaUser(categoryId);
     }
 
     @QueryMapping
@@ -47,7 +39,6 @@ public class GraphqlController {
     @QueryMapping
     public List<Product> products() { return productRepo.findAll(); }
 
-    // ================== Mutation: User ==================
     @MutationMapping
     public User createUser(@Argument UserInput input) {
         User u = new User();
@@ -80,7 +71,6 @@ public class GraphqlController {
         }
     }
 
-    // ================== Mutation: Category ==================
     @MutationMapping
     public Category createCategory(@Argument CategoryInput input) {
         Category c = new Category();
@@ -104,7 +94,6 @@ public class GraphqlController {
         return true;
     }
 
-    // ================== Mutation: Product ==================
     @MutationMapping
     public Product createProduct(@Argument ProductInput input) {
         Product p = new Product();
@@ -137,7 +126,6 @@ public class GraphqlController {
         }
     }
 
-    // ================== Input Types ==================
     public record UserInput(String fullname, String email, String password, String phone, List<String> categoryIds) {}
     public record CategoryInput(String name, String images) {}
     public record ProductInput(String title, Integer quantity, String desc, Double price, String userId) {}
