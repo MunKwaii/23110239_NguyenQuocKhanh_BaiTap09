@@ -1,11 +1,12 @@
 package vn.iostar.controller;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
-import org.springframework.graphql.data.method.annotation.Argument;
-import org.springframework.graphql.data.method.annotation.MutationMapping;
-import org.springframework.graphql.data.method.annotation.QueryMapping;
+import org.springframework.graphql.data.method.annotation.*;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 import vn.iostar.entity.*;
 import vn.iostar.repository.*;
 
@@ -14,11 +15,13 @@ import java.util.*;
 @Controller
 @RequiredArgsConstructor
 @Transactional
+@Validated
 public class GraphqlController {
 
     private final UserRepository userRepo;
     private final CategoryRepository categoryRepo;
     private final ProductRepository productRepo;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     @QueryMapping
     public List<Product> productsByPriceAsc() {
@@ -39,17 +42,21 @@ public class GraphqlController {
     @QueryMapping
     public List<Product> products() { return productRepo.findAll(); }
 
+    // ----------------- User CRUD -----------------
     @MutationMapping
-    public User createUser(@Argument UserInput input) {
+    public User createUser(@Argument @Valid UserInput input) {
+        if (userRepo.findByEmail(input.email()).isPresent()) {
+            throw new IllegalArgumentException("Email đã tồn tại");
+        }
         User u = new User();
-        applyUserInput(u, input);
+        applyUserInput(u, input, true);
         return userRepo.save(u);
     }
 
     @MutationMapping
-    public User updateUser(@Argument Long id, @Argument UserInput input) {
+    public User updateUser(@Argument Long id, @Argument @Valid UserUpdateInput input) {
         User u = userRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
-        applyUserInput(u, input);
+        applyUserInput(u, input, false);
         return userRepo.save(u);
     }
 
@@ -60,19 +67,22 @@ public class GraphqlController {
         return true;
     }
 
-    private void applyUserInput(User u, UserInput input) {
+    private void applyUserInput(User u, BaseUserInput input, boolean isCreate) {
         if (input.fullname() != null) u.setFullname(input.fullname());
         if (input.email() != null) u.setEmail(input.email());
-        if (input.password() != null) u.setPassword(input.password());
+        if (input.password() != null) u.setPassword(passwordEncoder.encode(input.password())); // mã hoá
         if (input.phone() != null) u.setPhone(input.phone());
+        if (input.role() != null) u.setRole(input.role());
         if (input.categoryIds() != null) {
-            Set<Category> cats = new HashSet<>(categoryRepo.findAllById(input.categoryIds().stream().map(Long::valueOf).toList()));
+            Set<Category> cats = new HashSet<>(categoryRepo.findAllById(input.categoryIds()));
             u.setCategories(cats);
         }
+        if (isCreate && u.getRole() == null) u.setRole(Role.USER);
     }
 
+    // ----------------- Category CRUD -----------------
     @MutationMapping
-    public Category createCategory(@Argument CategoryInput input) {
+    public Category createCategory(@Argument @Valid CategoryInput input) {
         Category c = new Category();
         c.setName(input.name());
         c.setImages(input.images());
@@ -80,7 +90,7 @@ public class GraphqlController {
     }
 
     @MutationMapping
-    public Category updateCategory(@Argument Long id, @Argument CategoryInput input) {
+    public Category updateCategory(@Argument Long id, @Argument @Valid CategoryInput input) {
         Category c = categoryRepo.findById(id).orElseThrow(() -> new RuntimeException("Category not found"));
         if (input.name() != null) c.setName(input.name());
         if (input.images() != null) c.setImages(input.images());
@@ -94,15 +104,16 @@ public class GraphqlController {
         return true;
     }
 
+    // ----------------- Product CRUD -----------------
     @MutationMapping
-    public Product createProduct(@Argument ProductInput input) {
+    public Product createProduct(@Argument @Valid ProductInput input) {
         Product p = new Product();
         applyProductInput(p, input);
         return productRepo.save(p);
     }
 
     @MutationMapping
-    public Product updateProduct(@Argument Long id, @Argument ProductInput input) {
+    public Product updateProduct(@Argument Long id, @Argument @Valid ProductInput input) {
         Product p = productRepo.findById(id).orElseThrow(() -> new RuntimeException("Product not found"));
         applyProductInput(p, input);
         return productRepo.save(p);
@@ -121,12 +132,50 @@ public class GraphqlController {
         if (input.desc() != null) p.setDesc(input.desc());
         if (input.price() != null) p.setPrice(input.price());
         if (input.userId() != null) {
-            User u = userRepo.findById(Long.valueOf(input.userId())).orElseThrow(() -> new RuntimeException("User not found"));
+            User u = userRepo.findById(input.userId())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
             p.setUser(u);
         }
     }
 
-    public record UserInput(String fullname, String email, String password, String phone, List<String> categoryIds) {}
-    public record CategoryInput(String name, String images) {}
-    public record ProductInput(String title, Integer quantity, String desc, Double price, String userId) {}
+    // ====== INPUT TYPES with validation ======
+    interface BaseUserInput {
+        String fullname();
+        String email();
+        String password();
+        String phone();
+        Role role();
+        List<Long> categoryIds();
+    }
+
+    public record UserInput(
+            @NotBlank String fullname,
+            @NotBlank @Email String email,
+            @NotBlank @Size(min=6, message="Password tối thiểu 6 ký tự") String password,
+            @Pattern(regexp = "^(\\+?\\d{8,15})?$", message = "Phone không hợp lệ") String phone,
+            Role role,
+            List<@NotNull Long> categoryIds
+    ) implements BaseUserInput {}
+
+    public record UserUpdateInput(
+            @Size(min=1) String fullname,
+            @Email String email,
+            @Size(min=6, message="Password tối thiểu 6 ký tự") String password,
+            @Pattern(regexp = "^(\\+?\\d{8,15})?$", message = "Phone không hợp lệ") String phone,
+            Role role,
+            List<@NotNull Long> categoryIds
+    ) implements BaseUserInput {}
+
+    public record CategoryInput(
+            @Size(min=1, max=255) String name,
+            @Size(max=1000) String images
+    ) {}
+
+    public record ProductInput(
+            @Size(min=1) String title,
+            @Min(0) Integer quantity,
+            @Size(max=2000) String desc,
+            @DecimalMin(value="0.0", inclusive=true, message="price >= 0") Double price,
+            Long userId
+    ) {}
 }

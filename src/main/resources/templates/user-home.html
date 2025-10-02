@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>User Home - Danh sách sản phẩm</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        h2 { color: #4CAF50; margin-bottom: 20px; }
+        ul { margin: 0; padding: 0; list-style: none; }
+        li { background: #fff; margin: 8px 0; padding: 10px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .row { margin-bottom: 15px; }
+        select, button { padding: 6px 10px; margin-left: 5px; }
+    </style>
+</head>
+<body>
+
+<h2>Xin chào User 👋</h2>
+<div class="row">
+    <button onclick="loadProductsAsc()">Xem sản phẩm theo giá ↑</button>
+    <select id="categorySelect"></select>
+    <button onclick="loadByCategory()">Xem theo Category</button>
+</div>
+<ul id="productList"></ul>
+
+<script>
+    const GQL = "/graphql";
+
+    async function gql(query, variables = {}) {
+        const res = await fetch(GQL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, variables })
+        });
+        const json = await res.json();
+        if (json.errors) {
+            alert(JSON.stringify(json.errors));
+            throw new Error(JSON.stringify(json.errors));
+        }
+        return json.data;
+    }
+
+    async function loadProductsAsc() {
+        const q = `query { productsByPriceAsc { id title price user { fullname } } }`;
+        const data = await gql(q);
+        document.getElementById("productList").innerHTML =
+            data.productsByPriceAsc.map(p => `
+                <li>
+                    <b>${p.title}</b> - ${p.price} USD <br/>
+                    Người bán: ${p.user?.fullname || "Không rõ"}
+                </li>
+            `).join("");
+    }
+
+    // Load sản phẩm theo category
+    async function loadByCategory() {
+        const id = document.getElementById("categorySelect").value;
+        if (!id) return;
+        const q = `query($id: ID!) {
+            productsByCategory(categoryId: $id) { id title price user { fullname } }
+        }`;
+        const data = await gql(q, { id });
+        document.getElementById("productList").innerHTML =
+            data.productsByCategory.map(p => `
+                <li>
+                    <b>${p.title}</b> - ${p.price} USD <br/>
+                    Người bán: ${p.user?.fullname || "Không rõ"}
+                </li>
+            `).join("");
+    }
+
+    async function loadCategories() {
+        const q = `query { categories { id name } }`;
+        const data = await gql(q);
+        const sel = document.getElementById("categorySelect");
+        sel.innerHTML = `<option value="">--Chọn category--</option>` +
+            data.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    }
+
+    (async function init() {
+        await loadProductsAsc();
+        await loadCategories();
+    })();
+</script>
+</body>
+</html>

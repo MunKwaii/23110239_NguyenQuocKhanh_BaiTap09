@@ -24,23 +24,6 @@ type Mutation {
 }
 
 # ================== Entity mapping ==================
-type User {
-    id: ID!
-    fullname: String
-    email: String!
-    password: String
-    phone: String
-    categories: [Category!]
-    products: [Product!]
-}
-
-input UserInput {
-    fullname: String
-    email: String
-    password: String
-    phone: String
-    categoryIds: [ID!]
-}
 
 type Category {
     id: ID!
@@ -69,4 +52,34 @@ input ProductInput {
     desc: String
     price: Float
     userId: ID
+}
+type User {
+    id: ID!
+    fullname: String!
+    email: String!
+    password: String
+    phone: String
+    role: Role!        # <---
+    categories: [Category!]
+    products: [Product!]
+}
+
+enum Role { USER ADMIN }
+
+input UserInput {
+    fullname: String!
+    email: String!
+    password: String!
+    phone: String
+    role: Role
+    categoryIds: [ID!]
+}
+
+input UserUpdateInput {
+    fullname: String
+    email: String
+    password: String
+    phone: String
+    role: Role
+    categoryIds: [ID!]
 }

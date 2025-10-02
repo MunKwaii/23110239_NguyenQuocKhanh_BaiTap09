@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin - Quản lý Category & Product</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: #eee; padding: 20px; }
+        h1 { color: #ff9800; }
+        h2, h3 { color: #4CAF50; margin-top: 30px; }
+        input, select { margin: 5px; padding: 6px; }
+        button { margin: 5px; padding: 6px 12px; cursor: pointer; }
+        ul { margin: 10px 0; }
+        li { margin: 5px 0; }
+        .row { margin-bottom: 10px; }
+        .logout { float: right; }
+    </style>
+</head>
+<body>
+
+<h1>Trang ADMIN</h1>
+<a class="logout" href="/logout">Đăng xuất</a>
+<p>Quản lý sản phẩm, user và category.</p>
+
+<hr/>
+
+<h2>Danh sách sản phẩm</h2>
+<div class="row">
+    <button onclick="loadProductsAsc()">Load theo giá ↑</button>
+    <select id="categorySelect"></select>
+    <button onclick="loadByCategory()">Load theo Category</button>
+</div>
+<ul id="productList"></ul>
+
+<h3>Thêm / Cập nhật sản phẩm</h3>
+<div class="row">
+    <input id="pId" type="hidden">
+    <input id="pTitle" placeholder="Title">
+    <input id="pPrice" placeholder="Price" type="number">
+    <input id="pQuantity" placeholder="Quantity" type="number" value="1">
+    <button onclick="addProduct()">Add</button>
+    <button onclick="updateProduct()">Update</button>
+</div>
+
+<hr/>
+
+<h2>User</h2>
+<ul id="userList"></ul>
+<div class="row">
+    <input id="uId" type="hidden">
+    <input id="uName" placeholder="Fullname">
+    <input id="uEmail" placeholder="Email">
+    <input id="uPass" placeholder="Password">
+    <input id="uPhone" placeholder="Phone">
+    <button onclick="addUser()">Add User</button>
+    <button onclick="updateUser()">Update User</button>
+</div>
+
+<hr/>
+
+<h2>Category</h2>
+<ul id="categoryList"></ul>
+<div class="row">
+    <input id="cId" type="hidden">
+    <input id="cName" placeholder="Name">
+    <input id="cImg" placeholder="Image">
+    <button onclick="addCategory()">Add Category</button>
+    <button onclick="updateCategory()">Update Category</button>
+</div>
+
+<script>
+    const GQL = "/graphql";
+
+    async function gql(query, variables = {}) {
+        const res = await fetch(GQL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, variables })
+        });
+        const json = await res.json();
+        if (json.errors) {
+            alert(JSON.stringify(json.errors));
+            throw new Error(JSON.stringify(json.errors));
+        }
+        return json.data;
+    }
+
+    // -------- Product --------
+    async function loadProductsAsc() {
+        const q = `query { productsByPriceAsc { id title price user { fullname } } }`;
+        const data = await gql(q);
+        document.getElementById("productList").innerHTML =
+            data.productsByPriceAsc.map(p => `
+      <li>
+        [${p.id}] ${p.title} - ${p.price} USD (${p.user?.fullname || "Unknown"})
+        <button onclick="deleteProduct(${p.id})">Delete</button>
+        <button onclick="prefillProduct(${p.id}, '${p.title}', ${p.price})">Edit</button>
+      </li>
+    `).join("");
+    }
+
+    async function loadByCategory() {
+        const id = document.getElementById("categorySelect").value;
+        if (!id) return;
+        const q = `query($id: ID!) {
+            productsByCategory(categoryId: $id) { id title price user { fullname } }
+        }`;
+        const data = await gql(q, { id });
+        document.getElementById("productList").innerHTML =
+            data.productsByCategory.map(p => `
+      <li>
+        [${p.id}] ${p.title} - ${p.price} USD (${p.user?.fullname || "Unknown"})
+        <button onclick="deleteProduct(${p.id})">Delete</button>
+        <button onclick="prefillProduct(${p.id}, '${p.title}', ${p.price})">Edit</button>
+      </li>
+    `).join("");
+    }
+
+    async function addProduct() {
+        const q = `mutation($input: ProductInput!) {
+            createProduct(input:$input) { id title price }
+        }`;
+        const variables = {
+            input: {
+                title: document.getElementById("pTitle").value,
+                price: parseFloat(document.getElementById("pPrice").value),
+                quantity: parseInt(document.getElementById("pQuantity").value),
+                desc: "new product", userId:"1"
+            }
+        };
+        await gql(q, variables);
+        await loadProductsAsc();
+    }
+
+    function prefillProduct(id, title, price) {
+        document.getElementById("pId").value = id;
+        document.getElementById("pTitle").value = title;
+        document.getElementById("pPrice").value = price;
+    }
+
+    async function updateProduct() {
+        const q = `mutation($id: ID!, $input: ProductInput!) {
+            updateProduct(id:$id, input:$input) { id title price }
+        }`;
+        const variables = {
+            id: document.getElementById("pId").value,
+            input: {
+                title: document.getElementById("pTitle").value,
+                price: parseFloat(document.getElementById("pPrice").value)
+            }
+        };
+        await gql(q, variables);
+        await loadProductsAsc();
+    }
+
+    async function deleteProduct(id) {
+        const q = `mutation { deleteProduct(id:${id}) }`;
+        await gql(q);
+        await loadProductsAsc();
+    }
+
+    // -------- User --------
+    async function loadUsers() {
+        const q = `query { users { id fullname email phone } }`;
+        const data = await gql(q);
+        document.getElementById("userList").innerHTML =
+            data.users.map(u => `
+      <li>
+        [${u.id}] ${u.fullname} (${u.email}, ${u.phone})
+        <button onclick="deleteUser(${u.id})">Delete</button>
+        <button onclick="prefillUser(${u.id}, '${u.fullname}', '${u.email}', '${u.phone}')">Edit</button>
+      </li>
+    `).join("");
+    }
+
+    async function addUser() {
+        const q = `mutation($input: UserInput!) {
+            createUser(input:$input) { id fullname email }
+        }`;
+        const variables = {
+            input: {
+                fullname: document.getElementById("uName").value,
+                email: document.getElementById("uEmail").value,
+                password: document.getElementById("uPass").value,
+                phone: document.getElementById("uPhone").value
+            }
+        };
+        await gql(q, variables);
+        await loadUsers();
+    }
+
+    function prefillUser(id, name, email, phone) {
+        document.getElementById("uId").value = id;
+        document.getElementById("uName").value = name;
+        document.getElementById("uEmail").value = email;
+        document.getElementById("uPhone").value = phone;
+    }
+
+    async function updateUser() {
+        const q = `mutation($id: ID!, $input: UserInput!) {
+            updateUser(id:$id, input:$input) { id fullname email phone }
+        }`;
+        const variables = {
+            id: document.getElementById("uId").value,
+            input: {
+                fullname: document.getElementById("uName").value,
+                email: document.getElementById("uEmail").value,
+                password: document.getElementById("uPass").value,
+                phone: document.getElementById("uPhone").value
+            }
+        };
+        await gql(q, variables);
+        await loadUsers();
+    }
+
+    async function deleteUser(id) {
+        const q = `mutation { deleteUser(id:${id}) }`;
+        await gql(q);
+        await loadUsers();
+    }
+
+    // -------- Category --------
+    async function loadCategories() {
+        const q = `query { categories { id name images } }`;
+        const data = await gql(q);
+        document.getElementById("categoryList").innerHTML =
+            data.categories.map(c => `
+      <li>
+        [${c.id}] ${c.name} (${c.images})
+        <button onclick="deleteCategory(${c.id})">Delete</button>
+        <button onclick="prefillCategory(${c.id}, '${c.name}', '${c.images}')">Edit</button>
+      </li>
+    `).join("");
+
+        // Fill dropdown
+        const sel = document.getElementById("categorySelect");
+        sel.innerHTML = `<option value="">--Chọn category--</option>` +
+            data.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    }
+
+    async function addCategory() {
+        const q = `mutation($input: CategoryInput!) {
+            createCategory(input:$input) { id name }
+        }`;
+        const variables = {
+            input: {
+                name: document.getElementById("cName").value,
+                images: document.getElementById("cImg").value
+            }
+        };
+        await gql(q, variables);
+        await loadCategories();
+    }
+
+    function prefillCategory(id, name, img) {
+        document.getElementById("cId").value = id;
+        document.getElementById("cName").value = name;
+        document.getElementById("cImg").value = img;
+    }
+
+    async function updateCategory() {
+        const q = `mutation($id: ID!, $input: CategoryInput!) {
+            updateCategory(id:$id, input:$input) { id name images }
+        }`;
+        const variables = {
+            id: document.getElementById("cId").value,
+            input: {
+                name: document.getElementById("cName").value,
+                images: document.getElementById("cImg").value
+            }
+        };
+        await gql(q, variables);
+        await loadCategories();
+    }
+
+    async function deleteCategory(id) {
+        const q = `mutation { deleteCategory(id:${id}) }`;
+        await gql(q);
+        await loadCategories();
+    }
+
+    (async function init() {
+        await loadProductsAsc();
+        await loadUsers();
+        await loadCategories();
+    })();
+</script>
+</body>
+</html>
